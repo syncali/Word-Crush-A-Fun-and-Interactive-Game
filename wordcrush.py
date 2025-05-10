@@ -35,15 +35,22 @@ FONT = pygame.font.Font(None, 50)
 HEADER_FONT = pygame.font.Font(None, 40)
 SCORE_FONT = pygame.font.Font(None, 20)
 
-# Load dictionary of valid English words
-word_list = set()
+# Load dictionary of valid English words using NLTK
 try:
-    with open('dictionary.txt', 'r') as f:
-        for line in f:
-            word = line.strip().upper()
-            if len(word) >= 3:  # Only store words with 3+ letters
-                word_list.add(word)
-except FileNotFoundError:
+    import nltk
+    from nltk.corpus import words
+    
+    # Download words corpus if not already present
+    try:
+        nltk.data.find('corpora/words')
+    except LookupError:
+        nltk.download('words', quiet=True)
+    
+    # Get all words and convert to uppercase for case-insensitive matching
+    word_list = {word.upper() for word in words.words() if len(word) >= 3}
+    print(f"Loaded {len(word_list)} words from NLTK corpus")
+except ImportError:
+    print("NLTK not installed, using fallback dictionary")
     # Minimal dictionary as fallback
     word_list = {"CAT", "DOG", "PIG", "BAT", "HAT", "RUN", "SIT", "FLY", "BIG", 
                 "RED", "MAP", "PIN", "CUP", "BOX", "CAR", "BUS", "SUN", "AIR",
