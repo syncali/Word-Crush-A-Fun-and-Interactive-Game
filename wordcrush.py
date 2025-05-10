@@ -21,6 +21,18 @@ LETTER_SCORES = {
     "S": 1, "T": 1, "U": 1, "V": 4, "W": 4, "X": 8, "Y": 4, "Z": 10
 }
 
+# Scrabble letter distribution (number of each tile in the standard game)
+LETTER_DISTRIBUTION = {
+    'A': 9, 'B': 2, 'C': 2, 'D': 4, 'E': 12, 'F': 2, 'G': 3, 'H': 2, 'I': 9,
+    'J': 1, 'K': 1, 'L': 4, 'M': 2, 'N': 6, 'O': 8, 'P': 2, 'Q': 1, 'R': 6,
+    'S': 4, 'T': 6, 'U': 4, 'V': 2, 'W': 2, 'X': 1, 'Y': 2, 'Z': 1
+}
+
+# Create a weighted letter pool for random selection based on Scrabble distribution
+LETTER_POOL = []
+for letter, count in LETTER_DISTRIBUTION.items():
+    LETTER_POOL.extend([letter] * count)
+
 # Colors
 WHITE = (255, 255, 255)
 DARK_PURPLE = (100, 0, 180)
@@ -59,10 +71,118 @@ except ImportError:
     word_list = {"CAT", "DOG", "PIG", "BAT", "HAT", "RUN", "SIT", "FLY", "BIG", 
                 "RED", "MAP", "PIN", "CUP", "BOX", "CAR", "BUS", "SUN", "AIR",
                 "SEA", "TOP", "LOW", "HOT", "ICE", "ONE", "TWO", "EAT", "TEN"}
+    
+def check_word(word):
+    """Checks if a string is a valid word in our dictionary."""
+    return word in word_list and len(word) >= 3
 
-# Letter Pool
-LETTERS = list(LETTER_SCORES.keys())
-grid = [[random.choice(LETTERS) for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+def get_new_letter():
+    """Get a new letter based on Scrabble distribution with some additional logic."""
+    # Ensure we get at least 1 vowel in every 3 letters on average
+    vowels = ['A', 'E', 'I', 'O', 'U']
+    
+    # 40% chance to force a vowel to increase playability
+    if random.random() < 0.4:
+        # Weight vowels according to their frequency in Scrabble
+        vowel_weights = {v: LETTER_DISTRIBUTION[v] for v in vowels}
+        total = sum(vowel_weights.values())
+        r = random.random() * total
+        cumulative = 0
+        for vowel, weight in vowel_weights.items():
+            cumulative += weight
+            if r <= cumulative:
+                return vowel
+    
+    # Otherwise use the standard letter pool
+    return random.choice(LETTER_POOL)
+
+
+def generate_grid_without_words():
+    """Generate a grid with no valid words already formed."""
+    attempts = 0
+    max_attempts = 100  # Prevent infinite loop
+    
+    while attempts < max_attempts:
+        attempts += 1
+        
+        # Create initial random grid
+        new_grid = [[get_new_letter() for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+        
+        # Check if the grid has any valid words
+        valid_words_found = False
+        
+        # Check rows
+        for r in range(GRID_SIZE):
+            row_str = ''.join(new_grid[r])
+            for start in range(GRID_SIZE - 2):  # Minimum 3-letter word
+                for end in range(start + 2, GRID_SIZE):
+                    word = row_str[start:end+1]
+                    if check_word(word):
+                        valid_words_found = True
+                        break
+                if valid_words_found:
+                    break
+            if valid_words_found:
+                break
+        
+        if not valid_words_found:
+            # Check columns
+            for c in range(GRID_SIZE):
+                col_str = ''.join(new_grid[r][c] for r in range(GRID_SIZE))
+                for start in range(GRID_SIZE - 2):  # Minimum 3-letter word
+                    for end in range(start + 2, GRID_SIZE):
+                        word = col_str[start:end+1]
+                        if check_word(word):
+                            valid_words_found = True
+                            break
+                    if valid_words_found:
+                        break
+                if valid_words_found:
+                    break
+        
+        # If no valid words were found, use this grid
+        if not valid_words_found:
+            print(f"Found grid with no words after {attempts} attempts")
+            return new_grid
+    
+    # If we can't find a grid without words after max attempts,
+    # create a grid with minimal valid words by replacing problematic letters
+    print(f"Could not find grid with no words after {max_attempts} attempts")
+    print("Creating grid with manual fixes...")
+    
+    # Create an initial grid
+    fallback_grid = [[get_new_letter() for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    
+    # Replace tiles that form words with less common letters (Q, Z, X)
+    uncommon = ['Q', 'Z', 'X', 'J', 'K']
+    
+    # Check and fix rows
+    for r in range(GRID_SIZE):
+        row_str = ''.join(fallback_grid[r])
+        for start in range(GRID_SIZE - 2):
+            for end in range(start + 2, GRID_SIZE):
+                word = row_str[start:end+1]
+                if check_word(word):
+                    # Replace middle letter with uncommon letter
+                    mid = start + (end - start) // 2
+                    fallback_grid[r][mid] = random.choice(uncommon)
+    
+    # Check and fix columns
+    for c in range(GRID_SIZE):
+        col_str = ''.join(fallback_grid[r][c] for r in range(GRID_SIZE))
+        for start in range(GRID_SIZE - 2):
+            for end in range(start + 2, GRID_SIZE):
+                word = col_str[start:end+1]
+                if check_word(word):
+                    # Replace middle letter with uncommon letter
+                    mid = start + (end - start) // 2
+                    fallback_grid[mid][c] = random.choice(uncommon)
+    
+    return fallback_grid
+
+
+# Initialize grid with weighted random letters
+grid = generate_grid_without_words()
 
 # Pygame setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -168,16 +288,11 @@ def animate_swap(pos1, pos2):
     # Process valid words with animations
     process_valid_words()
 
-
-def check_word(word):
-    """Checks if a string is a valid word in our dictionary."""
-    return word in word_list and len(word) >= 3
-
 def get_words_and_positions():
     """Check for valid words in rows and columns, returns words with their positions."""
     valid_words = []
     
-    # Check rows
+    # Check rows - only left to right direction
     for r in range(GRID_SIZE):
         row_str = ''.join(grid[r])
         for start in range(GRID_SIZE - 2):  # Minimum 3-letter word
@@ -185,18 +300,19 @@ def get_words_and_positions():
                 word = row_str[start:end+1]
                 if check_word(word):
                     # Store word and positions: (word, [(r,c), (r,c+1), ...])
-                    positions = [(r, start + i) for i in range(len(word))]
+                    positions = [(r, start + i) for i in range(end - start + 1)]
                     valid_words.append((word, positions))
     
-    # Check columns
+    # Check columns - only top to bottom direction
     for c in range(GRID_SIZE):
-        col_str = ''.join(grid[r][c] for r in range(GRID_SIZE))
+        col_chars = [grid[r][c] for r in range(GRID_SIZE)]
+        col_str = ''.join(col_chars)
         for start in range(GRID_SIZE - 2):  # Minimum 3-letter word
             for end in range(start + 2, GRID_SIZE):
                 word = col_str[start:end+1]
                 if check_word(word):
                     # Store word and positions: (word, [(r,c), (r+1,c), ...])
-                    positions = [(start + i, c) for i in range(len(word))]
+                    positions = [(start + i, c) for i in range(end - start + 1)]
                     valid_words.append((word, positions))
                     
     return valid_words
@@ -310,7 +426,7 @@ def drop_new_tiles():
                 grid[row][col] = grid[row-1][col]
             
             # Add new random letter at the top
-            grid[0][col] = random.choice(LETTERS)
+            grid[0][col] = random.choice(LETTER_POOL)
         
         # Step 2: Animate the dropping with a simple smooth motion
         steps = 8
@@ -524,11 +640,60 @@ def show_game_over_menu():
         pygame.time.delay(100)
     
     return False
+    
+    # If we can't find a grid without words after max attempts,
+    # create a grid with minimal valid words by replacing problematic letters
+    print(f"Could not find grid with no words after {max_attempts} attempts")
+    print("Creating grid with manual fixes...")
+    
+    # Create an initial grid
+    fallback_grid = [[get_new_letter() for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    
+    # Replace tiles that form words with less common letters (Q, Z, X)
+    uncommon = ['Q', 'Z', 'X', 'J', 'K']
+    
+    # Check and fix rows
+    for r in range(GRID_SIZE):
+        row_str = ''.join(fallback_grid[r])
+        for start in range(GRID_SIZE - 2):
+            for end in range(start + 2, GRID_SIZE):
+                word = row_str[start:end+1]
+                if check_word(word):
+                    # Replace middle letter with uncommon letter
+                    mid = start + (end - start) // 2
+                    fallback_grid[r][mid] = random.choice(uncommon)
+    
+    # Check and fix columns
+    for c in range(GRID_SIZE):
+        col_str = ''.join(fallback_grid[r][c] for r in range(GRID_SIZE))
+        for start in range(GRID_SIZE - 2):
+            for end in range(start + 2, GRID_SIZE):
+                word = col_str[start:end+1]
+                if check_word(word):
+                    # Replace middle letter with uncommon letter
+                    mid = start + (end - start) // 2
+                    fallback_grid[mid][c] = random.choice(uncommon)
+    
+    return fallback_grid
 
 
 # Game loop
 running = True
+game_over = False
+
 while running:
+    # Check for game over conditions
+    elapsed_time = int(time.time() - start_time)
+    time_over = elapsed_time >= TIMER_START
+    moves_over = moves_left <= 0
+    
+    if (time_over or moves_over) and not game_over:
+        # Only show game over once
+        game_over = True
+        show_game_over_menu()
+        running = False
+        continue
+
     screen.fill(WHITE)
     draw_header()
     draw_grid()
@@ -537,21 +702,18 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-        elif event.type == pygame.MOUSEBUTTONDOWN and moves_left > 0:
+        elif event.type == pygame.MOUSEBUTTONDOWN and moves_left > 0 and not time_over:
             x, y = event.pos
             if y > HEADER_HEIGHT:
                 col, row = x // TILE_SIZE, (y - HEADER_HEIGHT) // TILE_SIZE
-                if selected_tile is None:
-                    selected_tile = (row, col)
-                else:
-                    if abs(row - selected_tile[0]) + abs(col - selected_tile[1]) == 1:
-                        animate_swap(selected_tile, (row, col))
-                    selected_tile = None
+                if 0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE:  # Ensure within bounds
+                    if selected_tile is None:
+                        selected_tile = (row, col)
+                    else:
+                        if abs(row - selected_tile[0]) + abs(col - selected_tile[1]) == 1:
+                            animate_swap(selected_tile, (row, col))
+                        selected_tile = None
 
     pygame.display.flip()
 
-    if time.time() - start_time >= TIMER_START:
-        running = False
-
-show_game_over_menu()
 pygame.quit()
