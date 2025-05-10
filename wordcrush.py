@@ -161,16 +161,8 @@ def animate_swap(pos1, pos2):
     grid[r1][c1], grid[r2][c2] = grid[r2][c2], grid[r1][c1]
     moves_left -= 1  # Reduce move count
     
-    # Check for valid words after the swap
-    valid_words = get_words_and_positions()
-    if valid_words:
-        # Calculate points for all valid words
-        for word, positions in valid_words:
-            word_score = calculate_word_score(word)
-            score += word_score
-        
-        # Highlight the valid words
-        highlight_words(valid_words)
+    # Process valid words with animations
+    process_valid_words()
 
 
 def check_word(word):
@@ -231,6 +223,182 @@ def highlight_words(words_positions):
     
     pygame.display.flip()
     pygame.time.delay(1000)  # Show the highlight for 1 second
+
+
+def pop_tiles(positions):
+    """Animate tiles fading out when they form a valid word."""
+    # Create a set of positions to be removed
+    empty_positions = set(positions)
+    if not empty_positions:
+        return
+    
+    # Simplified animation - just fade out the tiles that form words
+    frames = 10
+    for i in range(frames):
+        screen.fill(WHITE)
+        draw_header()
+        
+        # Calculate alpha for fading
+        alpha = 255 - int((i / frames) * 255)
+        
+        # Draw the grid with fading effect for valid word tiles
+        for row in range(GRID_SIZE):
+            for col in range(GRID_SIZE):
+                x, y = col * TILE_SIZE, row * TILE_SIZE + HEADER_HEIGHT
+                
+                if (row, col) in empty_positions:
+                    # Draw fading tile
+                    temp_surface = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+                    draw_gradient_tile(temp_surface, 0, 0, TILE_SIZE, TILE_SIZE, 
+                                     DARK_PURPLE, LIGHT_PURPLE, alpha)
+                    
+                    letter = grid[row][col]
+                    if letter:
+                        # Fade text along with tile
+                        text_color = (TEXT_COLOR[0], TEXT_COLOR[1], TEXT_COLOR[2], alpha)
+                        text_surface = FONT.render(letter, True, text_color)
+                        temp_surface.blit(text_surface, (TILE_SIZE // 3, TILE_SIZE // 4))
+                    
+                    screen.blit(temp_surface, (x, y))
+                else:
+                    # Draw normal tiles
+                    draw_gradient_tile(screen, x, y, TILE_SIZE, TILE_SIZE, DARK_PURPLE, LIGHT_PURPLE)
+                    pygame.draw.rect(screen, WHITE, (x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2), 2)
+                    
+                    letter = grid[row][col]
+                    if letter:  # Check if letter exists
+                        text_surface = FONT.render(letter, True, TEXT_COLOR)
+                        score_surface = SCORE_FONT.render(str(LETTER_SCORES[letter]), True, WHITE)
+                        
+                        screen.blit(text_surface, (x + TILE_SIZE // 3, y + TILE_SIZE // 4))
+                        screen.blit(score_surface, (x + TILE_SIZE - 20, y + TILE_SIZE - 25))
+        
+        pygame.display.flip()
+        pygame.time.delay(30)
+        
+        # Check for quit events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+    
+    # Remove popped tiles from the grid
+    for row, col in positions:
+        grid[row][col] = None
+
+def drop_new_tiles():
+    """Fill empty spaces by dropping tiles from above and adding new ones at the top."""
+    # Process each column individually
+    for col in range(GRID_SIZE):
+        # Count how many empty spaces in this column
+        empty_spaces = []
+        for row in range(GRID_SIZE):
+            if grid[row][col] is None:
+                empty_spaces.append(row)
+        
+        if not empty_spaces:
+            continue  # No empty spaces in this column
+        
+        # Step 1: Shift existing tiles down
+        for empty_row in sorted(empty_spaces):
+            # Move all tiles above this empty space down
+            for row in range(empty_row, 0, -1):
+                grid[row][col] = grid[row-1][col]
+            
+            # Add new random letter at the top
+            grid[0][col] = random.choice(LETTERS)
+        
+        # Step 2: Animate the dropping with a simple smooth motion
+        steps = 8
+        for step in range(steps + 1):
+            screen.fill(WHITE)
+            draw_header()
+            
+            # Calculate progress of the dropping animation
+            progress = step / steps
+            
+            # Draw all tiles
+            for row in range(GRID_SIZE):
+                for c in range(GRID_SIZE):
+                    # For columns with dropping tiles
+                    if c == col and row < len(empty_spaces):
+                        # Calculate the drop position
+                        source_y = (row - 1) * TILE_SIZE + HEADER_HEIGHT
+                        if row == 0:
+                            source_y = -TILE_SIZE + HEADER_HEIGHT  # Coming from above the grid
+                        target_y = row * TILE_SIZE + HEADER_HEIGHT
+                        current_y = source_y + (target_y - source_y) * progress
+                        
+                        # Draw the dropping tile
+                        draw_gradient_tile(screen, c * TILE_SIZE, current_y, TILE_SIZE, TILE_SIZE, 
+                                          DARK_PURPLE, LIGHT_PURPLE)
+                        pygame.draw.rect(screen, WHITE, 
+                                        (c * TILE_SIZE + 1, current_y + 1, TILE_SIZE - 2, TILE_SIZE - 2), 2)
+                        
+                        letter = grid[row][c]
+                        if letter:  # Ensure we have a valid letter
+                            text_surface = FONT.render(letter, True, TEXT_COLOR)
+                            score_surface = SCORE_FONT.render(str(LETTER_SCORES[letter]), True, WHITE)
+                            
+                            screen.blit(text_surface, (c * TILE_SIZE + TILE_SIZE // 3, current_y + TILE_SIZE // 4))
+                            screen.blit(score_surface, (c * TILE_SIZE + TILE_SIZE - 20, current_y + TILE_SIZE - 25))
+                    else:
+                        # Draw stationary tiles
+                        x, y = c * TILE_SIZE, row * TILE_SIZE + HEADER_HEIGHT
+                        draw_gradient_tile(screen, x, y, TILE_SIZE, TILE_SIZE, DARK_PURPLE, LIGHT_PURPLE)
+                        pygame.draw.rect(screen, WHITE, (x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2), 2)
+                        
+                        letter = grid[row][c]
+                        if letter:  # Check if letter exists
+                            text_surface = FONT.render(letter, True, TEXT_COLOR)
+                            score_surface = SCORE_FONT.render(str(LETTER_SCORES[letter]), True, WHITE)
+                            
+                            screen.blit(text_surface, (x + TILE_SIZE // 3, y + TILE_SIZE // 4))
+                            screen.blit(score_surface, (x + TILE_SIZE - 20, y + TILE_SIZE - 25))
+            
+            pygame.display.flip()
+            pygame.time.delay(30)
+            
+            # Check for quit events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
+
+def process_valid_words():
+    """Check for valid words, update score, and handle tile movements."""
+    global score
+    
+    # Step 1: Find valid words
+    valid_words = get_words_and_positions()
+    if not valid_words:
+        return False  # No valid words found
+    
+    # Step 2: Highlight valid words
+    highlight_words(valid_words)
+    
+    # Step 3: Collect positions of tiles to be removed and update score
+    all_positions = set()
+    for word, positions in valid_words:
+        word_score = calculate_word_score(word)
+        score += word_score
+        # Only add positions of tiles that form valid words
+        for pos in positions:
+            all_positions.add(pos)
+    
+    # Step 4: Remove tiles and animate
+    pop_tiles(all_positions)
+    
+    # Step 5: Drop tiles to fill gaps
+    drop_new_tiles()
+    
+    # Step 6: Check for new valid words after dropping
+    # Recursively call this function if new valid words are formed
+    if get_words_and_positions():
+        pygame.time.delay(300)  # Brief delay before checking for new matches
+        process_valid_words()
+    
+    return True
 
 
 # Game loop
