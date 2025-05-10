@@ -1,6 +1,7 @@
 import pygame
 import random
 import time
+import math
 
 # Initialize Pygame
 pygame.init()
@@ -290,7 +291,7 @@ def animate_swap(pos1, pos2):
 
 def get_words_and_positions():
     """Check for valid words in rows and columns, returns words with their positions."""
-    valid_words = []
+    all_words = []
     
     # Check rows - only left to right direction
     for r in range(GRID_SIZE):
@@ -301,7 +302,7 @@ def get_words_and_positions():
                 if check_word(word):
                     # Store word and positions: (word, [(r,c), (r,c+1), ...])
                     positions = [(r, start + i) for i in range(end - start + 1)]
-                    valid_words.append((word, positions))
+                    all_words.append((word, positions))
     
     # Check columns - only top to bottom direction
     for c in range(GRID_SIZE):
@@ -313,8 +314,26 @@ def get_words_and_positions():
                 if check_word(word):
                     # Store word and positions: (word, [(r,c), (r+1,c), ...])
                     positions = [(start + i, c) for i in range(end - start + 1)]
-                    valid_words.append((word, positions))
-                    
+                    all_words.append((word, positions))
+    
+    # Filter out subwords - only keep the longest word when positions overlap
+    valid_words = []
+    
+    # Sort words by length (descending)
+    all_words.sort(key=lambda x: len(x[0]), reverse=True)
+    
+    # Track covered positions
+    covered_positions = set()
+    
+    for word, positions in all_words:
+        pos_set = set(positions)
+        
+        # Check if this word shares any positions with already found words
+        if not any(pos in covered_positions for pos in pos_set):
+            # This word doesn't overlap with any longer word
+            valid_words.append((word, positions))
+            covered_positions.update(pos_set)
+    
     return valid_words
 
 def calculate_word_score(word):
@@ -322,28 +341,120 @@ def calculate_word_score(word):
     return sum(LETTER_SCORES[letter] for letter in word)
 
 def highlight_words(words_positions):
-    """Temporarily highlight valid words on the grid."""
+    """Highlight valid words with an attractive animation that clearly shows the word and score."""
     if not words_positions:
         return
-        
-    # Draw grid with highlighted positions
-    for word, positions in words_positions:
-        word_score = calculate_word_score(word)
-        # Highlight each position of the word
-        for r, c in positions:
-            x, y = c * TILE_SIZE, r * TILE_SIZE + HEADER_HEIGHT
-            pygame.draw.rect(screen, GREEN, (x, y, TILE_SIZE, TILE_SIZE), 4)
-            
-        # Display word and score
-        first_pos = positions[0]
-        x = first_pos[1] * TILE_SIZE
-        y = first_pos[0] * TILE_SIZE + HEADER_HEIGHT - 30
-        word_text = SCORE_FONT.render(f"{word}: +{word_score}", True, GREEN)
-        screen.blit(word_text, (x, y))
     
-    pygame.display.flip()
-    pygame.time.delay(1000)  # Show the highlight for 1 second
-
+    # Duration settings
+    highlight_time = 1500  # Total time in ms
+    frames = 30
+    delay_per_frame = highlight_time // frames
+    
+    # For each frame of animation
+    for i in range(frames):
+        # Clear and redraw base grid
+        screen.fill(WHITE)
+        draw_header()
+        draw_grid()
+        
+        progress = i / frames
+        
+        # First half: grow highlight, second half: maintain
+        scale_factor = min(1.0, progress * 2)
+        alpha = min(255, progress * 510)  # Faster fade-in
+        
+        # For each word, create highlighting effects
+        for word, positions in words_positions:
+            word_score = calculate_word_score(word)
+            
+            # Calculate the center of the word
+            avg_row = sum(pos[0] for pos in positions) / len(positions)
+            avg_col = sum(pos[1] for pos in positions) / len(positions)
+            center_x = avg_col * TILE_SIZE + TILE_SIZE // 2
+            center_y = avg_row * TILE_SIZE + HEADER_HEIGHT + TILE_SIZE // 2
+            
+            # 1. Draw connecting line between tiles in the word
+            if len(positions) > 1:
+                # Sort positions by row/col depending on word orientation
+                if all(pos[0] == positions[0][0] for pos in positions):  # Horizontal word
+                    sorted_pos = sorted(positions, key=lambda pos: pos[1])
+                else:  # Vertical word
+                    sorted_pos = sorted(positions, key=lambda pos: pos[0])
+                
+                # Draw line connecting the centers of the tiles
+                line_points = [(p[1] * TILE_SIZE + TILE_SIZE // 2, 
+                              p[0] * TILE_SIZE + HEADER_HEIGHT + TILE_SIZE // 2) for p in sorted_pos]
+                
+                # Create a thicker line with glow effect
+                line_width = int(4 + 3 * scale_factor)
+                line_color = (100, 255, 100, min(180, int(alpha * 0.7)))
+                
+                # Draw line with pygame.draw.lines
+                line_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                pygame.draw.lines(line_surface, line_color, False, line_points, line_width)
+                screen.blit(line_surface, (0, 0))
+            
+            # 2. Highlight each tile in the word with a growing effect
+            for r, c in positions:
+                x, y = c * TILE_SIZE, r * TILE_SIZE + HEADER_HEIGHT
+                
+                # Create a slightly larger highlight rect that grows with the animation
+                grow_amount = int(TILE_SIZE * 0.2 * scale_factor)
+                highlight_x = x - grow_amount // 2
+                highlight_y = y - grow_amount // 2
+                highlight_size = TILE_SIZE + grow_amount
+                
+                # Draw a semi-transparent highlight behind the tile
+                highlight_surface = pygame.Surface((highlight_size, highlight_size), pygame.SRCALPHA)
+                highlight_color = (100, 255, 100, min(100, int(alpha * 0.4)))
+                pygame.draw.rect(highlight_surface, highlight_color, 
+                                (0, 0, highlight_size, highlight_size), 0, border_radius=8)
+                screen.blit(highlight_surface, (highlight_x, highlight_y))
+                
+                # Draw a border around the tile
+                border_color = (0, 200, 0, min(255, int(alpha)))
+                border_width = max(2, int(3 * scale_factor))
+                pygame.draw.rect(screen, border_color, 
+                                (x, y, TILE_SIZE, TILE_SIZE), 
+                                border_width, border_radius=4)
+            
+            # 3. Show the word and score with a floating animation
+            if progress > 0.2:  # Start showing the word after a brief delay
+                # Calculate word display position above the tiles
+                if len(positions) > 2:
+                    disp_x = center_x - 20 * len(word)
+                    disp_y = center_y - TILE_SIZE * 1.5
+                else:  # For shorter words, position more precisely
+                    disp_x = positions[0][1] * TILE_SIZE
+                    disp_y = positions[0][0] * TILE_SIZE + HEADER_HEIGHT - TILE_SIZE
+                
+                # Floating animation
+                float_offset = math.sin(progress * math.pi * 2) * 5
+                disp_y += float_offset
+                
+                # Create word display with shadow effect
+                word_alpha = min(255, int((progress - 0.2) * 425))  # Fade in
+                
+                # Shadow text (offset)
+                shadow_surface = HEADER_FONT.render(f"{word}: +{word_score}", True, (0, 0, 0))
+                shadow_surface.set_alpha(word_alpha // 2)
+                
+                # Main text
+                word_surface = HEADER_FONT.render(f"{word}: +{word_score}", True, (50, 200, 50))
+                word_surface.set_alpha(word_alpha)
+                
+                # Draw shadow then text
+                screen.blit(shadow_surface, (disp_x + 2, disp_y + 2))
+                screen.blit(word_surface, (disp_x, disp_y))
+        
+        pygame.display.flip()
+        pygame.time.delay(delay_per_frame)
+        
+        # Check for quit events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
 
 def pop_tiles(positions):
     """Animate tiles fading out when they form a valid word."""
