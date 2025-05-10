@@ -435,17 +435,38 @@ def highlight_words(words_positions):
                 # Create word display with shadow effect
                 word_alpha = min(255, int((progress - 0.2) * 425))  # Fade in
                 
-                # Shadow text (offset)
-                shadow_surface = HEADER_FONT.render(f"{word}: +{word_score}", True, (0, 0, 0))
-                shadow_surface.set_alpha(word_alpha // 2)
+                # Create a background panel for better visibility
+                word_text = f"{word}: +{word_score}"
+                text_size = HEADER_FONT.size(word_text)
+                panel_width = text_size[0] + 20
+                panel_height = text_size[1] + 10
                 
-                # Main text
-                word_surface = HEADER_FONT.render(f"{word}: +{word_score}", True, (50, 200, 50))
+                # Draw background panel with rounded corners
+                panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+                bg_color = (0, 0, 0, min(180, int(word_alpha * 0.7)))  # Semi-transparent black background
+                pygame.draw.rect(panel_surface, bg_color, 
+                                (0, 0, panel_width, panel_height), 
+                                0, border_radius=8)
+                
+                # Add a colored border to the panel
+                border_color = (50, 255, 50, word_alpha)
+                pygame.draw.rect(panel_surface, border_color, 
+                                (0, 0, panel_width, panel_height), 
+                                2, border_radius=8)
+                
+                # Position the panel
+                panel_x = disp_x - 10
+                panel_y = disp_y - 5
+                screen.blit(panel_surface, (panel_x, panel_y))
+                
+                # Main text - more vibrant colors for better contrast
+                word_surface = HEADER_FONT.render(word_text, True, (220, 255, 220))
                 word_surface.set_alpha(word_alpha)
                 
-                # Draw shadow then text
-                screen.blit(shadow_surface, (disp_x + 2, disp_y + 2))
-                screen.blit(word_surface, (disp_x, disp_y))
+                # Position text centered on the panel
+                text_x = panel_x + (panel_width - text_size[0]) // 2
+                text_y = panel_y + (panel_height - text_size[1]) // 2
+                screen.blit(word_surface, (text_x, text_y))
         
         pygame.display.flip()
         pygame.time.delay(delay_per_frame)
