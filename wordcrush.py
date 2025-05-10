@@ -29,11 +29,15 @@ TEXT_COLOR = (255, 255, 255)
 HIGHLIGHT_COLOR = (70, 70, 70, 100)
 BLACK = (0, 0, 0)
 GREEN = (0, 180, 0)  # For highlighting valid words
+OVERLAY_COLOR = (0, 0, 0, 180)  # Semi-transparent black overlay
+GAME_OVER_BG = (60, 20, 100)  # Dark purple for game over box
+GOLD = (255, 215, 0)  # Gold color for score highlight
 
 # Fonts
 FONT = pygame.font.Font(None, 50)
 HEADER_FONT = pygame.font.Font(None, 40)
 SCORE_FONT = pygame.font.Font(None, 20)
+LARGE_FONT = pygame.font.Font(None, 80)
 
 # Load dictionary of valid English words using NLTK
 try:
@@ -400,6 +404,127 @@ def process_valid_words():
     
     return True
 
+def show_game_over_menu():
+    """Display an attractive game over screen with the final score."""
+    global score
+    
+    # Create a semi-transparent overlay for the entire screen
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill(OVERLAY_COLOR)
+    screen.blit(overlay, (0, 0))
+    
+    # Create the game over box
+    box_width, box_height = 400, 300
+    box_x = WIDTH // 2 - box_width // 2
+    box_y = HEIGHT // 2 - box_height // 2
+    
+    # Animation for the box appearing (scaling up)
+    for i in range(20):
+        # Clear overlay each frame
+        screen.blit(overlay, (0, 0))
+        
+        # Calculate scaled size for animation
+        scale = i / 20.0
+        current_width = int(box_width * scale)
+        current_height = int(box_height * scale)
+        current_x = WIDTH // 2 - current_width // 2
+        current_y = HEIGHT // 2 - current_height // 2
+        
+        # Draw box with rounded corners and gradient
+        box_surface = pygame.Surface((current_width, current_height), pygame.SRCALPHA)
+        for y in range(current_height):
+            # Create vertical gradient
+            progress = y / current_height
+            r = GAME_OVER_BG[0] + (DARK_PURPLE[0] - GAME_OVER_BG[0]) * progress
+            g = GAME_OVER_BG[1] + (DARK_PURPLE[1] - GAME_OVER_BG[1]) * progress
+            b = GAME_OVER_BG[2] + (DARK_PURPLE[2] - GAME_OVER_BG[2]) * progress
+            pygame.draw.line(box_surface, (int(r), int(g), int(b)), 
+                            (0, y), (current_width, y))
+        
+        # Draw border
+        if i > 10:  # Only draw border when box is big enough
+            border_radius = min(15, int(15 * scale))
+            pygame.draw.rect(box_surface, WHITE, 
+                            (0, 0, current_width, current_height), 
+                            3, border_radius=border_radius)
+        
+        screen.blit(box_surface, (current_x, current_y))
+        pygame.display.flip()
+        pygame.time.delay(20)
+    
+    # Draw final box with content
+    box_surface = pygame.Surface((box_width, box_height), pygame.SRCALPHA)
+    for y in range(box_height):
+        # Create vertical gradient
+        progress = y / box_height
+        r = GAME_OVER_BG[0] + (DARK_PURPLE[0] - GAME_OVER_BG[0]) * progress
+        g = GAME_OVER_BG[1] + (DARK_PURPLE[1] - GAME_OVER_BG[1]) * progress
+        b = GAME_OVER_BG[2] + (DARK_PURPLE[2] - GAME_OVER_BG[2]) * progress
+        pygame.draw.line(box_surface, (int(r), int(g), int(b)), 
+                        (0, y), (box_width, y))
+    
+    # Draw border with rounded corners
+    pygame.draw.rect(box_surface, WHITE, 
+                    (0, 0, box_width, box_height), 
+                    4, border_radius=15)
+    
+    # Animate text appearing
+    for i in range(30):
+        # Copy the background and box
+        screen.blit(overlay, (0, 0))
+        screen.blit(box_surface, (box_x, box_y))
+        
+        # Calculate text transparency
+        alpha = min(255, i * 10)
+        
+        # Game Over text
+        if i > 5:
+            game_over_text = LARGE_FONT.render("GAME OVER", True, WHITE)
+            game_over_text.set_alpha(alpha)
+            text_x = WIDTH // 2 - game_over_text.get_width() // 2
+            text_y = box_y + 50
+            screen.blit(game_over_text, (text_x, text_y))
+        
+        # Score text
+        if i > 15:
+            score_label = HEADER_FONT.render("Your Score:", True, WHITE)
+            score_label.set_alpha(alpha)
+            score_text = LARGE_FONT.render(str(score), True, GOLD)
+            score_text.set_alpha(alpha)
+            
+            label_x = WIDTH // 2 - score_label.get_width() // 2
+            label_y = box_y + 130
+            score_x = WIDTH // 2 - score_text.get_width() // 2
+            score_y = box_y + 170
+            
+            screen.blit(score_label, (label_x, label_y))
+            screen.blit(score_text, (score_x, score_y))
+        
+        # Continue text
+        if i > 25:
+            continue_text = SCORE_FONT.render("Click anywhere to exit", True, WHITE)
+            continue_text.set_alpha(alpha)
+            continue_x = WIDTH // 2 - continue_text.get_width() // 2
+            continue_y = box_y + box_height - 30
+            screen.blit(continue_text, (continue_x, continue_y))
+        
+        pygame.display.flip()
+        pygame.time.delay(30)
+    
+    # Wait for click to exit
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                waiting = False
+                
+        pygame.time.delay(100)
+    
+    return False
+
 
 # Game loop
 running = True
@@ -428,4 +553,5 @@ while running:
     if time.time() - start_time >= TIMER_START:
         running = False
 
+show_game_over_menu()
 pygame.quit()
